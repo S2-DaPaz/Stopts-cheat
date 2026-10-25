@@ -164,7 +164,9 @@
         const legend = field.querySelector("legend p, legend");
         const input = field.querySelector("input[type='text'], input:not([type]), textarea");
         const category = norm(legend?.textContent);
-        return category && input ? { category, input } : null;
+        // Dica que o proprio Stopots mostra no icone (i) de algumas categorias
+        const help = (field.querySelector(".help")?.textContent || "").replace(/\s+/g, " ").trim();
+        return category && input ? { category, input, help } : null;
       })
       .filter(Boolean);
   }
@@ -531,8 +533,13 @@
 
     const aiEnabled = isAiEnabled();
 
+    const hintsByTopic = {};
+    getAnswerFields().forEach(({ category, help }) => {
+      if (help) hintsByTopic[resolveTopicKey(category)] = help;
+    });
+
     if (missingTopics.length && aiEnabled) {
-      requestAiSuggestions(letter, missingTopics)
+      requestAiSuggestions(letter, missingTopics, hintsByTopic)
         .then((suggestions) => {
           if (!suggestions || !Object.keys(suggestions).length) {
             showToast(`Preenchido: ${filled} (faltando: ${missing})`);
@@ -541,16 +548,19 @@
 
           let added = 0;
           missingTopics.forEach((topic) => {
-            const suggestion = suggestions[topic];
-            if (!suggestion) return;
-            if (suggestion[0] !== letter) return;
+            const options = suggestions[topic];
+            if (!options || !options.length) return;
+            const suggestion = options[0];
 
+            // Guarda todas as opcoes no dicionario: viram alternativas no botao ↻
             userDictionary[letter] ??= {};
             userDictionary[letter][topic] ??= [];
-            if (!userDictionary[letter][topic].includes(suggestion)) {
-              userDictionary[letter][topic].push(suggestion);
-              added += 1;
-            }
+            options.forEach((option) => {
+              if (!userDictionary[letter][topic].includes(option)) {
+                userDictionary[letter][topic].push(option);
+                added += 1;
+              }
+            });
 
             const input = inputByTopic.get(topic);
             if (input && input.value.trim().length === 0) {
@@ -576,8 +586,8 @@
     }
   }
 
-  function requestAiSuggestions(letter, topics) {
-    return fetchOpenRouterSuggestions(letter, topics).catch((err) => {
+  function requestAiSuggestions(letter, topics, hints = {}) {
+    return fetchOpenRouterSuggestions(letter, topics, hints).catch((err) => {
       if (err && err.message && err.message.includes("Missing OpenRouter API key")) {
         alert("Defina sua OpenRouter API Key no menu do helper antes de usar.");
       }
@@ -585,41 +595,118 @@
     });
   }
 
-  async function fetchOpenRouterSuggestions(letter, topics) {
+  // Nome completo das siglas que o Stopots usa
+  const AI_TOPIC_NAMES = {
+    FLV: "FRUTA, LEGUME OU VERDURA",
+    CEP: "CIDADE, ESTADO OU PAIS",
+    JLR: "JORNAL, LIVRO OU REVISTA",
+    PDA: "PERSONAGEM DE DESENHO ANIMADO",
+    PCH: "PARTE DO CORPO HUMANO",
+    MSÉ: "MINHA SOGRA E",
+  };
+
+  // Explicacoes para categorias que a IA costuma interpretar errado
+  const AI_TOPIC_HINTS = [
+    [/SOGRA/, 'um ADJETIVO no feminino que completa a frase (ex.: "minha sogra é chata"), nunca um nome'],
+    [/^ADJETIVO/, "um adjetivo (qualidade), nao um substantivo"],
+    [/^VERBO/, "um verbo no infinitivo"],
+    [/^CEP$|CIDADE, ESTADO/, "nome de uma cidade, estado ou pais"],
+    [/^PCH$|PARTE DO CORPO/, "uma parte do corpo humano"],
+    [/^PDA$|DESENHO/, "nome de um personagem ou desenho animado conhecido"],
+    [/^JLR$|JORNAL, LIVRO/, "titulo de um jornal, livro ou revista real"],
+    [/INGL[EÊ]S/, "uma palavra em ingles"],
+    [/ESPANHOL/, "uma palavra em espanhol"],
+    [/^NOME/, "um nome proprio de pessoa"],
+    [/CANTOR|ATOR|CELEBRIDADE|ESPORTISTA/, "nome de uma pessoa famosa real (de preferencia conhecida no Brasil)"],
+    [/^MARCA|APP OU SITE/, "nome de uma marca, app ou site real e famoso"],
+    [/PROGRAMA DE TV|S[EÉ]RIE|FILME/, "titulo real e conhecido no Brasil"],
+  ];
+
+  function getTopicHint(topic, gameHelp) {
+    const hints = [];
+    const name = normStatus(AI_TOPIC_NAMES[topic] || topic);
+    const known = AI_TOPIC_HINTS.find(([re]) => re.test(name) || re.test(normStatus(topic)));
+    if (known) hints.push(known[1]);
+    if (gameHelp) hints.push(`dica do jogo: ${gameHelp}`);
+    return hints.join("; ");
+  }
+
+  function buildAiPrompt(letter, topics, hints = {}) {
+    const list = topics
+      .map((topic, i) => {
+        const name = AI_TOPIC_NAMES[topic] || topic;
+        const hint = getTopicHint(topic, hints[topic]);
+        return `${i + 1}. ${name}${hint ? ` (${hint})` : ""}`;
+      })
+      .join("\n");
+
+    return [
+      `Estamos jogando Stop (Adedonha) no StopotS. A letra da rodada e "${letter}".`,
+      `Para cada categoria abaixo, de 3 respostas diferentes que comecem com a letra "${letter}".`,
+      "",
+      "Regras (outros jogadores brasileiros vao conferir e anular respostas erradas):",
+      `- A resposta inteira precisa comecar com "${letter}" (nao coloque artigo antes).`,
+      "- Tem que se encaixar claramente na categoria e ser algo real, que um brasileiro reconhece na hora.",
+      "- Prefira palavras em portugues do Brasil, exceto quando a categoria pede outro idioma.",
+      "- No maximo 20 caracteres, sem pontuacao. Nunca responda so a letra nem invente palavras.",
+      "- Coloque primeiro a resposta mais garantida; as outras podem ser menos obvias.",
+      "",
+      "Categorias:",
+      list,
+      "",
+      'Responda SOMENTE com JSON no formato {"1": ["...", "...", "..."], "2": [...]},',
+      "usando o numero de cada categoria como chave.",
+    ].join("\n");
+  }
+
+  // Mesmo tratamento que o Stopots aplica ao que e digitado no campo
+  function sanitizeAiAnswer(value) {
+    return (value || "")
+      .toString()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[\s\-,.]+/g, " ")
+      .replace(/[^0-9A-Z ]/g, "")
+      .trim()
+      .slice(0, 20)
+      .trim();
+  }
+
+  function parseAiResponse(content, letter, topics) {
+    let parsed = {};
+    try {
+      const jsonText = content.slice(content.indexOf("{"), content.lastIndexOf("}") + 1);
+      parsed = JSON.parse(jsonText);
+    } catch {
+      parsed = {};
+    }
+    if (parsed && typeof parsed[letter] === "object") parsed = parsed[letter];
+
+    const result = {};
+    topics.forEach((topic, i) => {
+      const name = AI_TOPIC_NAMES[topic] || topic;
+      let value = parsed[String(i + 1)] ?? parsed[name] ?? parsed[topic];
+      if (!Array.isArray(value)) value = [value];
+
+      const options = [];
+      value.forEach((v) => {
+        const answer = sanitizeAiAnswer(v);
+        if (answer.length < 2 || answer[0] !== letter || options.includes(answer)) return;
+        options.push(answer);
+      });
+      if (options.length) result[topic] = options;
+    });
+    return result;
+  }
+
+  async function fetchOpenRouterSuggestions(letter, topics, hints = {}) {
     const openrouterApiKey = localStorage.getItem(LS_KEY_API);
     if (!openrouterApiKey) {
       throw new Error("Missing OpenRouter API key");
     }
 
-    const topicMap = {
-      FLV: "FRUTA, LEGUME OU VERDURA",
-      CEP: "CIDADE, ESTADO OU PAIS",
-      JLR: "JORNAL, LIVRO OU REVISTA",
-      PDA: "PERSONAGEM DE DESENHO ANIMADO",
-      PCH: "PARTE DO CORPO HUMANO",
-    };
-
-    const resolvedTopics = topics.map((topic) => topicMap[topic] || topic);
-
-    const prompt = [
-      "Return ONLY valid JSON with no extra text.",
-      "Use common everyday Brazilian Portuguese words.",
-      "Keys must be exactly the topic names provided.",
-      "Values must be a single short answer in Portuguese (string, not array) that starts with the letter.",
-      "Do NOT reuse any of the example words below.",
-      "Example format (do NOT reuse these words):",
-      "{",
-      '  "A": {',
-      '    "ANIMAL": "ANTA",',
-      '    "COR": "AZUL",',
-      '    "COMIDA": "ARROZ",',
-      '    "NOME": "ANA",',
-      '    "PAIS": "ALEMANHA"',
-      "  }",
-      "}",
-      `Letter: ${letter}`,
-      `Topics: ${JSON.stringify(resolvedTopics)}`,
-    ].join("\n");
+    const prompt = buildAiPrompt(letter, topics, hints);
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -635,9 +722,15 @@
         models: AI_MODELS,
         // Sem raciocinio: responde em segundos (com raciocinio levava mais de 1 min)
         reasoning: { enabled: false },
-        temperature: 0.3,
+        temperature: 0.4,
+        max_tokens: 800,
+        response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "You are a game helper." },
+          {
+            role: "system",
+            content:
+              "Voce e um jogador experiente de Stop (Adedonha) do Brasil. Responde apenas com JSON valido.",
+          },
           { role: "user", content: prompt },
         ],
       }),
@@ -649,34 +742,8 @@
     }
 
     const data = await response.json();
-    let content = data?.choices?.[0]?.message?.content || "{}";
-    content = content
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-
-    let parsed = {};
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      parsed = {};
-    }
-
-    const normalized = {};
-    const letterBucket = parsed && typeof parsed === "object" ? parsed[letter] : null;
-
-    topics.forEach((topic) => {
-      const resolved = topicMap[topic] || topic;
-      const value =
-        (letterBucket && (letterBucket[resolved] || letterBucket[topic])) ||
-        parsed[resolved] ||
-        parsed[topic];
-
-      if (typeof value === "string" && value.trim()) {
-        normalized[topic] = value.trim().toUpperCase();
-      }
-    });
+    const content = data?.choices?.[0]?.message?.content || "{}";
+    const normalized = parseAiResponse(content, letter, topics);
 
     if (!Object.keys(normalized).length) {
       throw new Error(`Empty AI response: ${content}`);
