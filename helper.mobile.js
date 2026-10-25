@@ -608,7 +608,7 @@
   // Explicacoes para categorias que a IA costuma interpretar errado
   const AI_TOPIC_HINTS = [
     [/SOGRA/, 'um ADJETIVO no feminino que completa a frase "minha sogra é ___", nunca um nome'],
-    [/^ADJETIVO/, "um adjetivo (qualidade), nao um substantivo"],
+    [/^ADJETIVO/, "um adjetivo, nao um substantivo"],
     [/^VERBO/, "um verbo no infinitivo"],
     [/^CEP$|CIDADE, ESTADO/, "nome de uma cidade, estado ou pais"],
     [/^PCH$|PARTE DO CORPO/, "uma parte do corpo humano"],
@@ -617,7 +617,7 @@
     [/INGL[EÊ]S/, "uma palavra em ingles"],
     [/ESPANHOL/, "uma palavra em espanhol"],
     [/^NOME/, "um nome proprio de pessoa"],
-    [/CANTOR|ATOR|CELEBRIDADE|ESPORTISTA/, "nome de uma pessoa famosa real (de preferencia conhecida no Brasil)"],
+    [/CANTOR|ATOR|CELEBRIDADE|ESPORTISTA/, "nome de uma pessoa famosa real, de preferencia conhecida no Brasil"],
     [/^MARCA|APP OU SITE/, "nome de uma marca, app ou site real e famoso"],
     [/PROGRAMA DE TV|S[EÉ]RIE|FILME/, "titulo real e conhecido no Brasil"],
   ];
