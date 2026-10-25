@@ -607,7 +607,7 @@
 
   // Explicacoes para categorias que a IA costuma interpretar errado
   const AI_TOPIC_HINTS = [
-    [/SOGRA/, 'um ADJETIVO no feminino que completa a frase (ex.: "minha sogra é chata"), nunca um nome'],
+    [/SOGRA/, 'um ADJETIVO no feminino que completa a frase "minha sogra é ___", nunca um nome'],
     [/^ADJETIVO/, "um adjetivo (qualidade), nao um substantivo"],
     [/^VERBO/, "um verbo no infinitivo"],
     [/^CEP$|CIDADE, ESTADO/, "nome de uma cidade, estado ou pais"],
