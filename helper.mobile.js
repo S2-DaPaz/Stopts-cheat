@@ -796,6 +796,15 @@
         </div>
         <textarea id="sh-config-text" placeholder="Cole o dicionario aqui"></textarea>
       </div>
+      <div id="sh-apikey" style="display:none;">
+        <div class="sh-apikey-help">Cole sua chave do OpenRouter (openrouter.ai/keys). Ela fica salva so neste navegador.</div>
+        <input type="password" id="sh-apikey-input" placeholder="sk-or-v1-..." autocomplete="off" spellcheck="false" />
+        <div class="sh-config-row">
+          <button class="sh-actionbtn primary" id="sh-apikey-save">Salvar</button>
+          <button class="sh-actionbtn ghost" id="sh-apikey-toggle">Mostrar</button>
+          <button class="sh-actionbtn danger" id="sh-apikey-clear">Apagar</button>
+        </div>
+      </div>
       <div id="sh-validation" style="display:none;"></div>
       <div id="sh-toast" style="display:none;"></div>
     </div>
@@ -927,6 +936,9 @@
     .next{ background:#fabdc3; color:#1d1d1d; }
     #sh-config{ margin-bottom:8px; }
     .sh-config-row{ display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+    #sh-apikey{ margin-bottom:8px; }
+    .sh-apikey-help{ font-size:12px; opacity:.85; line-height:1.35; margin-bottom:8px; }
+    #sh-apikey-input{ width:100%; box-sizing:border-box; border-radius:12px; border:1px solid rgba(255,255,255,.2); padding:10px; margin-bottom:8px; background:rgba(0,0,0,.15); color:#fff; font-size:13px; outline:none; }
     #sh-config-text{ width:100%; min-height:120px; border-radius:12px; border:1px solid rgba(255,255,255,.2); padding:10px; background:rgba(0,0,0,.15); color:#fff; font-size:12px; outline:none; }
 
     #sh-validation{ margin-bottom:8px; }
@@ -979,6 +991,8 @@
   const titleEl = document.getElementById("sh-title");
   const configView = document.getElementById("sh-config");
   const configText = document.getElementById("sh-config-text");
+  const apiKeyView = document.getElementById("sh-apikey");
+  const apiKeyInput = document.getElementById("sh-apikey-input");
   const exportBtn = document.getElementById("sh-export");
   const importBtn = document.getElementById("sh-import");
   const validationView = document.getElementById("sh-validation");
@@ -997,6 +1011,7 @@
     if (titleEl) titleEl.textContent = "Sugestoes";
     if (configView) configView.style.display = "none";
     if (validationView) validationView.style.display = "none";
+    if (apiKeyView) apiKeyView.style.display = "none";
     actions.style.display = "flex";
     content.style.display = "block";
     render(true);
@@ -1011,6 +1026,25 @@
     content.style.display = "none";
     if (configView) configView.style.display = "block";
     if (validationView) validationView.style.display = "none";
+    if (apiKeyView) apiKeyView.style.display = "none";
+  }
+
+  // Campo dentro do painel (alguns navegadores bloqueiam o prompt() nativo)
+  function showApiKeyView() {
+    panelMode = "apikey";
+    lastPanelMode = "apikey";
+    if (titleEl) titleEl.textContent = "API Key";
+    subtitle.textContent = "";
+    actions.style.display = "none";
+    content.style.display = "none";
+    if (configView) configView.style.display = "none";
+    if (validationView) validationView.style.display = "none";
+    if (apiKeyView) apiKeyView.style.display = "block";
+    if (apiKeyInput) {
+      apiKeyInput.type = "password";
+      apiKeyInput.value = localStorage.getItem(LS_KEY_API) || "";
+      setTimeout(() => apiKeyInput.focus(), 0);
+    }
   }
 
   function renderValidation(result) {
@@ -1094,6 +1128,7 @@
     content.style.display = "none";
     if (configView) configView.style.display = "none";
     if (validationView) validationView.style.display = "block";
+    if (apiKeyView) apiKeyView.style.display = "none";
     renderValidation(result);
   }
 
@@ -1234,7 +1269,9 @@
         positionPanelNearButton(anchorRect);
       }
     }
-    if (lastPanelMode === "config") {
+    if (lastPanelMode === "apikey") {
+      showApiKeyView();
+    } else if (lastPanelMode === "config") {
       showConfigView();
     } else if (lastPanelMode === "validation") {
       showValidationView();
@@ -1377,12 +1414,36 @@
 
   goPlay.onclick = () => showPanel("suggestions");
 
-  setKeyBtn.onclick = () => {
-    const current = localStorage.getItem(LS_KEY_API) || "";
-    const key = prompt("Cole sua OpenRouter API Key:", current || "");
-    if (key === null) return;
-    localStorage.setItem(LS_KEY_API, key.trim());
+  setKeyBtn.onclick = () => showPanel("apikey");
+
+  const apiKeySave = document.getElementById("sh-apikey-save");
+  const apiKeyToggle = document.getElementById("sh-apikey-toggle");
+  const apiKeyClear = document.getElementById("sh-apikey-clear");
+
+  const saveApiKey = () => {
+    const key = (apiKeyInput.value || "").trim();
+    if (!key) {
+      showToast("Cole a chave antes de salvar");
+      return;
+    }
+    localStorage.setItem(LS_KEY_API, key);
+    apiKeyInput.type = "password";
     showToast("API Key salva");
+  };
+
+  apiKeySave.onclick = saveApiKey;
+  apiKeyInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveApiKey();
+  });
+  apiKeyToggle.onclick = () => {
+    const hidden = apiKeyInput.type === "password";
+    apiKeyInput.type = hidden ? "text" : "password";
+    apiKeyToggle.textContent = hidden ? "Esconder" : "Mostrar";
+  };
+  apiKeyClear.onclick = () => {
+    localStorage.removeItem(LS_KEY_API);
+    apiKeyInput.value = "";
+    showToast("API Key apagada");
   };
 
   if (exportBtn && importBtn && configText) {
