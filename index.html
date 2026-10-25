@@ -46,11 +46,11 @@
 
   <script>
     // Troque SEU_USUARIO e SEU_REPO se necessário
-    // jsDelivr serve direto do repositório (funciona mesmo se o GitHub Pages cair);
-    // se o jsDelivr falhar, tenta o GitHub Pages.
-    const helperUrl = "https://cdn.jsdelivr.net/gh/S2-DaPaz/Stopts-cheat@main/helper.mobile.js";
-    const fallbackUrl = "https://s2-dapaz.github.io/Stopts-cheat/helper.mobile.js";
-    const bookmarklet = `javascript:(()=>{const a=u=>{const s=document.createElement('script');s.src=u+'?v='+Date.now();return s},s=a('${helperUrl}');s.onerror=()=>document.body.appendChild(a('${fallbackUrl}'));document.body.appendChild(s);})();`;
+    // Pergunta ao GitHub qual e o ultimo commit da main e carrega esse commit pelo
+    // jsDelivr. O "@main" do jsDelivr pode ficar horas desatualizado; um commit
+    // especifico nunca fica. Se a API do GitHub falhar, usa "@main" mesmo.
+    const repo = "S2-DaPaz/Stopts-cheat";
+    const bookmarklet = `javascript:(()=>{const R='${repo}',L=v=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/'+R+'@'+v+'/helper.mobile.js';document.body.appendChild(s)};fetch('https://api.github.com/repos/'+R+'/commits/main').then(r=>r.json()).then(c=>L(c.sha)).catch(()=>L('main'))})();`;
 
     const bmInput = document.getElementById('bm');
     bmInput.value = bookmarklet;
