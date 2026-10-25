@@ -550,17 +550,16 @@
           missingTopics.forEach((topic) => {
             const options = suggestions[topic];
             if (!options || !options.length) return;
+            // So a primeira (mais garantida) vai pro dicionario: nos testes as
+            // alternativas erravam bem mais e poluiriam o botao ↻
             const suggestion = options[0];
 
-            // Guarda todas as opcoes no dicionario: viram alternativas no botao ↻
             userDictionary[letter] ??= {};
             userDictionary[letter][topic] ??= [];
-            options.forEach((option) => {
-              if (!userDictionary[letter][topic].includes(option)) {
-                userDictionary[letter][topic].push(option);
-                added += 1;
-              }
-            });
+            if (!userDictionary[letter][topic].includes(suggestion)) {
+              userDictionary[letter][topic].push(suggestion);
+              added += 1;
+            }
 
             const input = inputByTopic.get(topic);
             if (input && input.value.trim().length === 0) {
@@ -607,7 +606,7 @@
 
   // Explicacoes para categorias que a IA costuma interpretar errado
   const AI_TOPIC_HINTS = [
-    [/SOGRA/, 'um ADJETIVO no feminino que completa a frase "minha sogra é ___", nunca um nome'],
+    [/SOGRA/, 'um ADJETIVO comum do dia a dia, no feminino, que completa a frase "minha sogra é ___" (como chata, linda, brava, fofoqueira); nunca um nome, profissao ou palavra inventada'],
     [/^ADJETIVO/, "um adjetivo, nao um substantivo"],
     [/^VERBO/, "um verbo no infinitivo"],
     [/^CEP$|CIDADE, ESTADO/, "nome de uma cidade, estado ou pais"],
@@ -642,7 +641,7 @@
 
     return [
       `Estamos jogando Stop (Adedonha) no StopotS. A letra da rodada e "${letter}".`,
-      `Para cada categoria abaixo, de 3 respostas diferentes que comecem com a letra "${letter}".`,
+      `Para cada categoria abaixo, de 3 respostas diferentes que comecem com a letra "${letter}", da mais garantida para a menos garantida.`,
       "",
       "Regras (outros jogadores brasileiros vao conferir e anular respostas erradas):",
       `- A resposta inteira precisa comecar com "${letter}" (nao coloque artigo antes).`,
