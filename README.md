@@ -31,8 +31,8 @@ tutorial completo em video: https://youtu.be/cHtiDXX5qVY
 
 As sugestoes via IA usam OpenRouter. A chave precisa ficar salva no
 `localStorage` do proprio site do Stopots.
-Modelos atuais: `google/gemma-4-31b-it:free`, com fallback para `openrouter/free`
-(qualquer modelo gratuito disponivel). Se a IA parar de responder, troque `AI_MODELS`
+Modelos atuais: `dots-studio/dots-3-note-preview:free` (raciocinio desligado, ~2,5 s por resposta),
+com fallback para `google/gemma-4-31b-it:free` e `openrouter/free` (qualquer modelo gratuito disponivel). Se a IA parar de responder, troque `AI_MODELS`
 no topo de `helper.mobile.js` por um modelo listado em https://openrouter.ai/models?q=free.
 
 No jogo:

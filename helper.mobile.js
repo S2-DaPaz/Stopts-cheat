@@ -10,7 +10,13 @@
   const LS_KEY_PANEL_POS = "stopots_helper_panel_pos";
   const LS_KEY_MENU_POS = "stopots_helper_menu_pos";
   const LS_KEY_AI_ENABLED = "stopots_ai_enabled";
-  const AI_MODELS = ["google/gemma-4-31b-it:free", "openrouter/free"];
+  // Ordem de preferencia (testado em 2026-10): Dots 3 Note responde em ~2,5 s com
+  // boas respostas em PT-BR; os demais sao reserva se ele estiver fora/lotado.
+  const AI_MODELS = [
+    "dots-studio/dots-3-note-preview:free",
+    "google/gemma-4-31b-it:free",
+    "openrouter/free",
+  ];
   const loadDictionary = () => JSON.parse(localStorage.getItem(LS_KEY) || "{}");
   const saveDictionary = (dict) => localStorage.setItem(LS_KEY, JSON.stringify(dict));
   let userDictionary = {};
@@ -627,6 +633,8 @@
         // Modelos gratuitos somem com frequencia; "openrouter/free" escolhe
         // qualquer modelo gratuito disponivel como fallback.
         models: AI_MODELS,
+        // Sem raciocinio: responde em segundos (com raciocinio levava mais de 1 min)
+        reasoning: { enabled: false },
         temperature: 0.3,
         messages: [
           { role: "system", content: "You are a game helper." },
