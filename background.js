@@ -1,4 +1,6 @@
-const initialDictionary = {
+// Atribui direto em window (sem const global) para o script poder ser
+// carregado mais de uma vez na mesma pagina sem erro de redeclaracao.
+window.repoDictionary = {
   A: {
     ADJETIVO: ['ANIMADO'],
     ANIMAL: ['ANTA', 'ARARA', 'AVESTRUZ'],
@@ -671,6 +673,4 @@ const initialDictionary = {
     VESTUÁRIO: ['ZIPPER'],
   },
 };
-
-window.repoDictionary = initialDictionary;
 

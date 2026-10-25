@@ -24,14 +24,16 @@ tutorial completo em video: https://youtu.be/cHtiDXX5qVY
 1) Copie o bookmarklet no link acima.
 2) Abra o gerenciador de favoritos do navegador.
 3) Crie um novo favorito (ou edite um existente).
-4) No campo URL/EndereÃ§o, cole o bookmarklet completo.
+4) No campo URL/Endereço, cole o bookmarklet completo.
 5) Salve. Para usar, abra o Stopots e toque no favorito.
 
 ## Configurar API Key (IA)
 
 As sugestoes via IA usam OpenRouter. A chave precisa ficar salva no
 `localStorage` do proprio site do Stopots.
-Modelo atual: `arcee-ai/trinity-large-preview:free`.
+Modelos atuais: `google/gemma-4-31b-it:free`, com fallback para `openrouter/free`
+(qualquer modelo gratuito disponivel). Se a IA parar de responder, troque `AI_MODELS`
+no topo de `helper.mobile.js` por um modelo listado em https://openrouter.ai/models?q=free.
 
 No jogo:
 1) Abra a bolinha -> "API Key".

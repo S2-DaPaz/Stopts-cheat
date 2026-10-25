@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   console.log("Stopots Helper Mobile ativo");
 
   // ======================
@@ -10,6 +10,7 @@
   const LS_KEY_PANEL_POS = "stopots_helper_panel_pos";
   const LS_KEY_MENU_POS = "stopots_helper_menu_pos";
   const LS_KEY_AI_ENABLED = "stopots_ai_enabled";
+  const AI_MODELS = ["google/gemma-4-31b-it:free", "openrouter/free"];
   const loadDictionary = () => JSON.parse(localStorage.getItem(LS_KEY) || "{}");
   const saveDictionary = (dict) => localStorage.setItem(LS_KEY, JSON.stringify(dict));
   let userDictionary = {};
@@ -146,13 +147,36 @@
     return topicAliases[topic] || topic;
   }
 
+  // Seletores do layout atual do stopots.com (Next.js)
+  const ANSWER_FIELD_SELECTOR = "div.answer:not(.validate)";
+  const VALIDATE_ANSWER_SELECTOR = "div.validate.answer";
+  const EVALUATE_WORDS = ["AVALIAR", "EVALUATE", "EVALUAR", "VALIDATE", "VALIDAR"];
+
+  function getAnswerFields() {
+    return [...document.querySelectorAll(ANSWER_FIELD_SELECTOR)]
+      .map((field) => {
+        const legend = field.querySelector("legend p, legend");
+        const input = field.querySelector("input[type='text'], input:not([type]), textarea");
+        const category = norm(legend?.textContent);
+        return category && input ? { category, input } : null;
+      })
+      .filter(Boolean);
+  }
+
   function getCurrentLetter() {
+    const headerLetter = document.querySelector(".letter .maskLetter p, .headerGame .letter p");
+    const headerText = (headerLetter?.textContent || "").trim().toUpperCase();
+    if (/^[A-Z]$/.test(headerText)) return headerText;
+
     const spans = [...document.querySelectorAll("span,div,strong")];
     const el = spans.find((e) => /^[A-Z]$/.test((e.textContent || "").trim()));
     return el ? el.textContent.trim().toUpperCase() : null;
   }
 
   function getCategories() {
+    const fields = getAnswerFields();
+    if (fields.length) return [...new Set(fields.map((f) => f.category))];
+
     const labels = [...document.querySelectorAll("label")]
       .map((l) => norm(l.innerText))
       .filter(Boolean);
@@ -165,6 +189,17 @@
   }
 
   function getCurrentTopic() {
+    // Tela de validacao: <div class="validation"><div class="box data"><h2>TEMA<div class="help">...</div></h2>
+    const validationTitle = document.querySelector(".validation h2");
+    if (validationTitle) {
+      const ownText = [...validationTitle.childNodes]
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => n.textContent)
+        .join(" ");
+      const topic = norm(ownText || validationTitle.textContent);
+      if (topic) return topic;
+    }
+
     const preferred = document.querySelector(
       "#screenGame h3, #screenGame h2, #screenGame h1, h3, h2, h1"
     );
@@ -254,7 +289,7 @@
     if (!topicRaw) return [];
     const topic = resolveTopicKey(topicRaw);
 
-    const answerBlocks = document.querySelectorAll("div.validate.answer, .validate.answer");
+    const answerBlocks = document.querySelectorAll(VALIDATE_ANSWER_SELECTOR);
     const blocks = answerBlocks.length ? answerBlocks : document.querySelectorAll("label, div");
 
     const addedWords = [];
@@ -262,6 +297,14 @@
     const statusByBlock = new Map();
 
     blocks.forEach((block) => {
+      // Layout atual: cada resposta tem um checkbox escondido (marcado = valida)
+      const checkbox = block.querySelector?.("input[type='checkbox']");
+      if (answerBlocks.length && checkbox) {
+        const reported = block.classList.contains("reported");
+        hasAnyStatus = true;
+        statusByBlock.set(block, { hasStatus: true, isValid: checkbox.checked && !reported });
+        return;
+      }
       const statusText = block.querySelector?.("span, .status")?.innerText;
       const normalized = normStatus(statusText);
       const isInvalid = normalized.includes("INVALID");
@@ -309,7 +352,8 @@
         const isValid = normalized.includes("VALID") && !isInvalid;
         return isValid || isInvalid;
       });
-      const hasValidated = hasStatus || document.querySelector(".valid");
+      const hasValidated =
+        hasStatus || document.querySelector(".valid") || document.querySelector(VALIDATE_ANSWER_SELECTOR);
 
       if (hasValidated || Date.now() - startedAt > 3000) {
         clearInterval(timer);
@@ -319,13 +363,19 @@
     }, 200);
   }
 
+  function isEvaluateButton(b) {
+    if (!b || b.closest("#stopots-helper-overlay")) return false;
+    const text = normStatus(b.innerText).trim();
+    return EVALUATE_WORDS.includes(text);
+  }
+
   function findEvaluateButton() {
     const btns = [...document.querySelectorAll("button")];
-    return btns.find((b) => norm(b.innerText) === "AVALIAR");
+    return btns.find(isEvaluateButton);
   }
 
   function getPhaseKey() {
-    const hasInputs = document.querySelector("input, textarea");
+    const hasInputs = getInputCandidates().length > 0;
     const evalBtn = findEvaluateButton();
     if (evalBtn && !hasInputs) return "validation";
     if (hasInputs) return "answers";
@@ -336,8 +386,9 @@
     return [...document.querySelectorAll("input, textarea")].filter((el) => {
       const type = (el.getAttribute("type") || "").toLowerCase();
       if (el.disabled || el.readOnly) return false;
-      if (type === "hidden" || type === "button" || type === "submit") return false;
-      return true;
+      if (el.closest("#stopots-helper-overlay")) return false;
+      if (el.tagName === "TEXTAREA") return true;
+      return type === "" || type === "text" || type === "search";
     });
   }
 
@@ -360,6 +411,11 @@
   function buildCategoryInputMap(categories) {
     const map = new Map();
     const catSet = new Set(categories.map(norm));
+
+    getAnswerFields().forEach(({ category, input }) => {
+      if (catSet.has(category) && !map.has(category)) map.set(category, input);
+    });
+    if (map.size >= catSet.size) return map;
 
     const labels = [...document.querySelectorAll("label")];
     labels.forEach((label) => {
@@ -568,7 +624,9 @@
         "X-Title": "Stopots Helper",
       },
       body: JSON.stringify({
-        model: "arcee-ai/trinity-large-preview:free",
+        // Modelos gratuitos somem com frequencia; "openrouter/free" escolhe
+        // qualquer modelo gratuito disponivel como fallback.
+        models: AI_MODELS,
         temperature: 0.3,
         messages: [
           { role: "system", content: "You are a game helper." },
@@ -638,7 +696,7 @@
     <div id="sh-menu" aria-hidden="true">
       <div class="sh-menu-title">Stopots Helper</div>
       <button class="sh-menu-btn" id="sh-go-play">Jogar</button>
-      <button class="sh-menu-btn" id="sh-go-config">Configurar dicionÃ¡rio</button>
+      <button class="sh-menu-btn" id="sh-go-config">Configurar dicionário</button>
       <button class="sh-menu-btn" id="sh-set-key">API Key</button>
       <button class="sh-menu-btn sh-menu-close" id="sh-menu-close">Fechar</button>
     </div>
@@ -646,7 +704,7 @@
     <div id="sh-panel" aria-hidden="true">
       <div id="sh-header">
         <div class="sh-header-left">
-          <span class="sh-title" id="sh-title">SugestÃµes</span>
+          <span class="sh-title" id="sh-title">Sugestões</span>
           <span class="sh-sub" id="sh-subtitle"></span>
         </div>
         <div class="sh-header-right">
@@ -683,7 +741,7 @@
     #sh-btn{
       width:48px;height:48px;border-radius:999px;
       background:#000000; display:flex;align-items:center;justify-content:center;
-      background-image:url("https://s2-dapaz.github.io/Stopts-cheat/icon.png");
+      background-image:url("${base || "https://cdn.jsdelivr.net/gh/S2-DaPaz/Stopts-cheat@main"}/icon.png");
       background-size:70% 70%;
       background-repeat:no-repeat;
       background-position:center;
@@ -747,7 +805,7 @@
 
       overflow:auto;
       -webkit-overflow-scrolling: touch;
-      overscroll-behavior: contain; /* evita puxar a pÃ¡gina junto */
+      overscroll-behavior: contain; /* evita puxar a página junto */
       touch-action: pan-y;          /* rolagem suave no mobile */
     }
 
@@ -1052,14 +1110,14 @@
     btn.style.display = "flex";
   }
 
-  // Evita â€œscroll da pÃ¡ginaâ€ interferindo com o painel
+  // Evita “scroll da página” interferindo com o painel
   function lockBodyScroll(lock) {
     document.documentElement.style.overscrollBehavior = lock ? "none" : "";
     document.body.style.overscrollBehavior = lock ? "none" : "";
-    // nÃ£o vamos mexer em position fixed do body pra nÃ£o quebrar o site
+    // não vamos mexer em position fixed do body pra não quebrar o site
   }
 
-  // Impede o toque no painel de â€œvazarâ€ pra pÃ¡gina
+  // Impede o toque no painel de “vazar” pra página
   ["touchstart", "touchmove", "wheel"].forEach((evt) => {
     panel.addEventListener(
       evt,
@@ -1489,7 +1547,7 @@
   }
 
   // >>> CONFIG: abre nova guia
-  // Ajuste este caminho para onde vocÃª hospedar a pÃ¡gina config:
+  // Ajuste este caminho para onde você hospedar a página config:
   // Ex: https://seusite.com/config.html
   goConfig.onclick = () => {
     menu.style.display = "none";
@@ -1543,15 +1601,15 @@
     const btns = [...document.querySelectorAll("button")];
     btns.forEach((btn) => {
       if (btn.dataset.shAutoAdd) return;
-      if (norm(btn.innerText) !== "AVALIAR") return;
+      if (!isEvaluateButton(btn)) return;
       btn.dataset.shAutoAdd = "1";
       btn.addEventListener("click", handleEvaluateClick);
     });
   }
 
   // ======================
-  // Avaliar + adicionar (mantive simples aqui: sÃ³ aparece se tiver botÃ£o AVALIAR)
-  // VocÃª pode plugar sua lÃ³gica completa de "validado" depois, se quiser.
+  // Avaliar + adicionar (mantive simples aqui: só aparece se tiver botão AVALIAR)
+  // Você pode plugar sua lógica completa de "validado" depois, se quiser.
   // ======================
 
   function renderActions() {
@@ -1582,7 +1640,7 @@
 
     const reloadDict = document.createElement("button");
     reloadDict.className = "sh-actionbtn ghost";
-    reloadDict.textContent = "Recarregar dicionÃ¡rio";
+    reloadDict.textContent = "Recarregar dicionário";
     reloadDict.onclick = () => {
       refreshDictionary().then(() => {
         render(true);
@@ -1607,8 +1665,8 @@
     if (!letter || !categories.length) {
       content.innerHTML = `
         <div style="opacity:.85;font-size:12px;line-height:1.35">
-          Entre em uma sala e vÃ¡ para a tela do jogo.<br/>
-          (NÃ£o encontrei letra/categorias ainda)
+          Entre em uma sala e vá para a tela do jogo.<br/>
+          (Não encontrei letra/categorias ainda)
         </div>`;
       return;
     }
@@ -1626,13 +1684,13 @@
         <div class="sh-word">${currentWord}</div>
         <div class="sh-actions-row">
           <button class="copy">COPIAR</button>
-          <button class="next">â†»</button>
+          <button class="next">↻</button>
         </div>
       `;
 
       item.querySelector(".copy").onclick = () => {
         navigator.clipboard.writeText(currentWord);
-        showToast("ðŸ“‹ Copiado!");
+        showToast("📋 Copiado!");
       };
 
       item.querySelector(".next").onclick = () => {
@@ -1666,7 +1724,7 @@
     renderActions();
     renderSuggestions(letter, categories);
 
-    // restaura scroll para nÃ£o â€œvoltar pro topoâ€
+    // restaura scroll para não “voltar pro topo”
     panel.scrollTop = scrollBefore;
   }
 
@@ -1683,6 +1741,7 @@
   observer.observe(document.body, { childList: true, subtree: true });
 
   // Inicial
+  bindEvaluateButtons();
   showBubble();
 })();
 
